@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interactive Diffie-Hellman Key Exchange</title>
+<style>
+:root { --navy:#14213d; --blue:#2563eb; --pale:#eff6ff; --ink:#1f2937; --muted:#64748b; --line:#dbe3ee; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:Arial, sans-serif; color:var(--ink); background:#f5f7fb; line-height:1.55; }
+header { background:var(--navy); color:white; padding:28px 18px; text-align:center; }
+header h1 { margin:0 0 6px; font-size:clamp(1.4rem,4vw,2rem); }
+header p { margin:0; color:#dbeafe; }
+main { max-width:1050px; margin:24px auto; padding:0 16px 40px; }
+.notice { background:#fff7ed; border:1px solid #fed7aa; border-radius:10px; padding:12px 16px; margin-bottom:18px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
+.card { background:white; border:1px solid var(--line); border-radius:12px; padding:18px; box-shadow:0 3px 12px #0f172a0a; }
+h2 { color:var(--navy); font-size:1.15rem; margin:0 0 12px; }
+label { display:block; font-weight:600; margin:10px 0 5px; }
+input { width:100%; padding:10px; border:1px solid #b8c4d6; border-radius:7px; font-size:1rem; }
+button { border:0; border-radius:8px; padding:11px 16px; font-weight:700; cursor:pointer; background:var(--blue); color:white; margin:12px 6px 0 0; }
+button.secondary { background:#475569; }
+button:focus,input:focus { outline:3px solid #bfdbfe; outline-offset:1px; }
+.result { background:var(--pale); border:1px solid #bfdbfe; border-radius:8px; padding:12px; margin-top:12px; overflow-wrap:anywhere; }
+.value { font-family:Consolas,monospace; font-weight:700; }
+.muted { color:var(--muted); font-size:.92rem; }
+.steps { padding-left:22px; }
+footer { text-align:center; color:var(--muted); font-size:.85rem; padding:20px; }
+@media(max-width:560px) { main { margin-top:14px; } .card { padding:14px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Interactive Diffie-Hellman Key Exchange</h1>
+  <p>Educational demonstration of public-key agreement</p>
+</header>
+<main>
+
+  <section class="card">
+    <h2>1. Public parameters</h2>
+    <p>Choose a small prime number <span class="value">p</span> and a generator candidate <span class="value">g</span>.
+    Both values are public and may be known to everyone.</p>
+    <div class="grid">
+      <div><label for="prime">Prime number p (2–997)</label><input id="prime" type="number" min="2" max="997" value="23"></div>
+      <div><label for="generator">Generator candidate g</label><input id="generator" type="number" min="2" max="996" value="5"></div>
+    </div>
+    <p class="muted">For this teaching demo, p must be prime and 1 &lt; g &lt; p. The app checks primality, but does not prove that g generates the full multiplicative group.</p>
+  </section>
+
+  <section class="grid" style="margin-top:16px">
+    <div class="card">
+      <h2>2. Alice's values</h2>
+      <label for="alicePrivate">Alice's private value a</label>
+      <input id="alicePrivate" type="number" min="1" value="6">
+      <div class="result"><div>Public value A = g<sup>a</sup> mod p</div><div id="alicePublic" class="value">—</div></div>
+    </div>
+    <div class="card">
+      <h2>3. Bob's values</h2>
+      <label for="bobPrivate">Bob's private value b</label>
+      <input id="bobPrivate" type="number" min="1" value="15">
+      <div class="result"><div>Public value B = g<sup>b</sup> mod p</div><div id="bobPublic" class="value">—</div></div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>4. Calculate the shared secret</h2>
+    <p>Alice computes <span class="value">K₁ = B<sup>a</sup> mod p</span>. Bob computes
+    <span class="value">K₂ = A<sup>b</sup> mod p</span>.</p>
+    <button id="calculate">Run key exchange</button>
+    <button id="reset" class="secondary">Reset defaults</button>
+    <div id="status" class="result" aria-live="polite">Enter valid values, then run the exchange.</div>
+    <ol class="steps">
+      <li id="step1">Public parameters: p and g.</li>
+      <li id="step2">Alice publishes A; her private value a stays with Alice.</li>
+      <li id="step3">Bob publishes B; his private value b stays with Bob.</li>
+      <li id="step4">Both calculate the shared secret independently.</li>
+    </ol>
+  </section>
+
+  <section class="card" style="margin-top:16px">
+    <h2>5. Security observations</h2>
+    <ul>
+      <li>Private values should never be transmitted.</li>
+      <li>Diffie-Hellman establishes a shared value; it does not by itself authenticate the other party.</li>
+      <li>An unauthenticated exchange can be vulnerable to a man-in-the-middle attack.</li>
+      <li>Real systems use well-reviewed cryptographic libraries, strong parameters, authentication and key derivation. This small-number demo is not secure for real information.</li>
+    </ul>
+  </section>
+</main>
+<footer>Cyber Security Lab (7CS4-22) | Mini Project CSL-G08 | Educational implementation</footer>
+<script>
+"use strict";
+
+function isPrime(n) {
+  if (!Number.isSafeInteger(n) || n < 2) return false;
+  if (n % 2 === 0) return n === 2;
+  for (let i = 3; i * i <= n; i += 2) {
+    if (n % i === 0) return false;
+  }
+  return true;
+}
+
+// BigInt is used so intermediate multiplication remains exact.
+function modPow(base, exponent, modulus) {
+  let result = 1n;
+  let b = BigInt(base) % BigInt(modulus);
+  let e = BigInt(exponent);
+  const m = BigInt(modulus);
+  while (e > 0n) {
+    if (e % 2n === 1n) result = (result * b) % m;
+    b = (b * b) % m;
+    e = e / 2n;
+  }
+  return result;
+}
+
+function readPositiveInteger(id) {
+  const value = Number(document.getElementById(id).value);
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error("All private values must be positive whole numbers.");
+  }
+  return value;
+}
+
+function calculate() {
+  const status = document.getElementById("status");
+  try {
+    const p = Number(document.getElementById("prime").value);
+    const g = Number(document.getElementById("generator").value);
+    const a = readPositiveInteger("alicePrivate");
+    const b = readPositiveInteger("bobPrivate");
+
+    if (!isPrime(p) || p > 997) throw new Error("p must be a prime number between 2 and 997.");
+    if (!Number.isSafeInteger(g) || g <= 1 || g >= p) throw new Error("Choose g such that 1 < g < p.");
+    if (a > 1000000 || b > 1000000) throw new Error("For this demo, private values must not exceed 1,000,000.");
+
+    const A = modPow(g, a, p);
+    const B = modPow(g, b, p);
+    const aliceSecret = modPow(B, a, p);
+    const bobSecret = modPow(A, b, p);
+
+    document.getElementById("alicePublic").textContent = A.toString();
+    document.getElementById("bobPublic").textContent = B.toString();
+
+    const matched = aliceSecret === bobSecret;
+    status.innerHTML = `<strong>${matched ? "Success: both shared values match." : "Error: values do not match."}</strong><br>
+      Alice calculates K₁ = ${B}<sup>${a}</sup> mod ${p} = <span class="value">${aliceSecret}</span><br>
+      Bob calculates K₂ = ${A}<sup>${b}</sup> mod ${p} = <span class="value">${bobSecret}</span><br>
+      Shared value: <span class="value">${matched ? aliceSecret : "Mismatch"}</span>`;
+    document.getElementById("step1").textContent = `Public parameters: p = ${p}, g = ${g}.`;
+    document.getElementById("step2").textContent = `Alice keeps a = ${a} private and publishes A = ${A}.`;
+    document.getElementById("step3").textContent = `Bob keeps b = ${b} private and publishes B = ${B}.`;
+    document.getElementById("step4").textContent = `Alice obtains ${aliceSecret}; Bob obtains ${bobSecret}. Match: ${matched}.`;
+  } catch (error) {
+    status.textContent = error.message;
+    document.getElementById("alicePublic").textContent = "—";
+    document.getElementById("bobPublic").textContent = "—";
+  }
+}
+
+function resetDefaults() {
+  document.getElementById("prime").value = 23;
+  document.getElementById("generator").value = 5;
+  document.getElementById("alicePrivate").value = 6;
+  document.getElementById("bobPrivate").value = 15;
+  document.getElementById("alicePublic").textContent = "—";
+  document.getElementById("bobPublic").textContent = "—";
+  document.getElementById("status").textContent = "Enter valid values, then run the exchange.";
+  document.getElementById("step1").textContent = "Public parameters: p and g.";
+  document.getElementById("step2").textContent = "Alice publishes A; her private value a stays with Alice.";
+  document.getElementById("step3").textContent = "Bob publishes B; his private value b stays with Bob.";
+  document.getElementById("step4").textContent = "Both calculate the shared secret independently.";
+}
+
+document.getElementById("calculate").addEventListener("click", calculate);
+document.getElementById("reset").addEventListener("click", resetDefaults);
+</script>
+</body>
+</html>
